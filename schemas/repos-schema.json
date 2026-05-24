@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/primeinc/github-stars/schemas/repos-schema.json",
+  "$id": "https://github.com/4444J99/github-stars/schemas/repos-schema.json",
   "title": "GitHub Stars Curation Manifest Schema",
   "description": "Schema for repos.yml - A comprehensive personal repository knowledge base",
   "type": "object",

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('has title and loads repository data', async ({ page }) => {
-  const url = 'https://primeinc.github.io/github-stars/';
+  const url = 'https://4444j99.github.io/github-stars/';
   console.log(`Navigating to: ${url}`);
   
   // Use a longer timeout for initial navigation

@@ -3,7 +3,10 @@
  */
 
 import type { Manifest, ValidationError, ValidationResult } from './types.js';
-import { isCategoryAllowed, isFrameworkAllowed } from './taxonomy.js';
+import { canonicalize, createCanonicalSet, isFrameworkAllowed } from './taxonomy.js';
+
+// Mirrors schemas/repos-schema.json `categories.maxItems`.
+const MAX_CATEGORIES = 5;
 
 /**
  * Validate all repositories in a manifest against taxonomy
@@ -34,6 +37,11 @@ export function validateManifest(manifest: Manifest): ValidationResult {
     return { valid: false, errors, warnings };
   }
 
+  // Precompute the canonical allowed-category set once instead of rebuilding it
+  // per category per repo.
+  const allowedCategorySet = createCanonicalSet(manifest.taxonomy.categories_allowed);
+  const frameworksDefined = Array.isArray(manifest.taxonomy.frameworks_allowed);
+
   // Validate each repository
   for (const repo of manifest.repositories) {
     // Validate categories
@@ -47,13 +55,22 @@ export function validateManifest(manifest: Manifest): ValidationResult {
       continue;
     }
 
+    if (repo.categories.length > MAX_CATEGORIES) {
+      warnings.push({
+        repo: repo.repo,
+        field: 'categories',
+        value: String(repo.categories.length),
+        message: `Repository has ${repo.categories.length} categories; schema allows at most ${MAX_CATEGORIES}`,
+      });
+    }
+
     for (const category of repo.categories) {
       // Allow 'unclassified' as a special fallback category
       if (category === 'unclassified') {
         continue;
       }
 
-      if (!isCategoryAllowed(category, manifest.taxonomy)) {
+      if (!allowedCategorySet.has(canonicalize(category))) {
         errors.push({
           repo: repo.repo,
           field: 'categories',
@@ -77,7 +94,9 @@ export function validateManifest(manifest: Manifest): ValidationResult {
           repo: repo.repo,
           field: 'framework',
           value: repo.framework,
-          message: `Framework "${repo.framework}" is not in taxonomy.frameworks_allowed`,
+          message: frameworksDefined
+            ? `Framework "${repo.framework}" is not in taxonomy.frameworks_allowed`
+            : `Framework "${repo.framework}" is set but taxonomy.frameworks_allowed is not defined`,
         });
       }
     }

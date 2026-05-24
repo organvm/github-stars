@@ -111,7 +111,7 @@ jobs:
       - name: Wait for Pages CDN propagation
         shell: bash
         run: |
-          url="https://primeinc.github.io/github-stars/"
+          url="https://4444j99.github.io/github-stars/"
           echo "Waiting for $url to be ready..."
           for i in {1..30}; do
             content=$(curl -sL -H "Cache-Control: no-cache" "$url")
