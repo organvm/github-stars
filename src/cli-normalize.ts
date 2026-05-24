@@ -10,8 +10,10 @@ import { writeManifest } from './manifest/writer.js';
 import { validateManifest, formatValidationErrors } from './manifest/validator.js';
 
 const args = process.argv.slice(2);
-const inputFile = args[0] || 'repos.yml';
 const checkMode = args.includes('--check') || args.includes('--dry-run');
+// Ignore flags when picking the positional input file, so `--check` alone
+// isn't mistaken for a filename.
+const inputFile = args.find(a => !a.startsWith('--')) || 'repos.yml';
 
 console.log('='.repeat(80));
 console.log(`NORMALIZE MANIFEST${checkMode ? ' (DRY RUN)' : ''}`);

@@ -48,18 +48,22 @@ export function normalizeRepository(
     }
   }
 
-  // Normalize framework: validate against taxonomy or set to null
+  // Normalize framework: validate against taxonomy or set to null.
+  // Only touch repos that actually declare a framework — never inject `framework: null`
+  // into repos that omit it (that would make normalize non-idempotent vs. --check).
   const originalFramework = repo.framework;
-  const validFramework = validateFramework(originalFramework, taxonomy);
+  if (originalFramework != null) {
+    const validFramework = validateFramework(originalFramework, taxonomy);
 
-  if (originalFramework !== validFramework) {
-    normalized.framework = validFramework;
-    
-    if (originalFramework && !validFramework) {
-      changes.push(`Invalid framework "${originalFramework}" -> null`);
-      normalized.needs_review = true;
-    } else if (originalFramework && validFramework && originalFramework !== validFramework) {
-      changes.push(`Canonicalized framework: "${originalFramework}" -> "${validFramework}"`);
+    if (originalFramework !== validFramework) {
+      normalized.framework = validFramework;
+
+      if (!validFramework) {
+        changes.push(`Invalid framework "${originalFramework}" -> null`);
+        normalized.needs_review = true;
+      } else {
+        changes.push(`Canonicalized framework: "${originalFramework}" -> "${validFramework}"`);
+      }
     }
   }
 
@@ -88,13 +92,19 @@ export function normalizeManifest(manifest: Manifest): NormalizationResult {
 
   const needsReviewCount = normalizedRepos.filter(r => r.needs_review).length;
 
+  // Only bump the timestamp when something actually changed, so a no-op normalize
+  // produces a byte-identical file (and --check stays consistent with a real write).
+  const manifestUpdatedAt = changedRepos.length > 0
+    ? new Date().toISOString()
+    : manifest.manifest_metadata.manifest_updated_at;
+
   return {
     manifest: {
       ...manifest,
       repositories: normalizedRepos,
       manifest_metadata: {
         ...manifest.manifest_metadata,
-        manifest_updated_at: new Date().toISOString(),
+        manifest_updated_at: manifestUpdatedAt,
       },
     },
     changedRepos,

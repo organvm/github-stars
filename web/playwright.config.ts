@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'https://primeinc.github.io/github-stars/',
+    baseURL: 'https://4444j99.github.io/github-stars/',
     trace: 'retain-on-failure',
     screenshot: 'on',
     video: 'on-first-retry',

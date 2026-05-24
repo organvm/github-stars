@@ -40,15 +40,24 @@ export function isFrameworkAllowed(framework: string, taxonomy: Taxonomy): boole
 }
 
 /**
- * Filter categories to only those in the allowed list, with canonicalization
- * Returns canonical versions of valid categories
+ * Filter categories to only those in the allowed list, with canonicalization.
+ * Returns canonical versions of valid categories, de-duplicated (order preserved)
+ * so the result can never violate the schema's uniqueItems constraint.
  */
 export function filterValidCategories(categories: string[], taxonomy: Taxonomy): string[] {
   const allowedSet = createCanonicalSet(taxonomy.categories_allowed);
-  
-  return categories
-    .map(canonicalize)
-    .filter(cat => allowedSet.has(cat));
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const category of categories) {
+    const canonical = canonicalize(category);
+    if (allowedSet.has(canonical) && !seen.has(canonical)) {
+      seen.add(canonical);
+      result.push(canonical);
+    }
+  }
+
+  return result;
 }
 
 /**

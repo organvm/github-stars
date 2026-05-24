@@ -13,8 +13,7 @@ function AppContent() {
     category: null,
     language: null,
     topic: null,
-    archived: false,
-    template: false
+    archived: false
   });
   const [sortBy, setSortBy] = useState('starred'); // starred, stars, pushed, name
 
@@ -31,7 +30,6 @@ function AppContent() {
            language: repo.github_metadata?.language || 'Unknown',
            topics: repo.github_metadata?.topics || [],
            pushed_at: repo.github_metadata?.repo_pushed_at || null,
-           is_template: repo.github_metadata?.is_template || false,
            avatar: repo.github_metadata?.owner_avatar
         }));
         setRepos(normalized);
@@ -59,7 +57,6 @@ function AppContent() {
 
     return result.filter(repo => {
       if (excludeKey !== 'archived' && !filters.archived && repo.archived) return false;
-      if (excludeKey !== 'template' && filters.template && !repo.is_template) return false;
       if (excludeKey !== 'category' && filters.category && !repo.categories?.includes(filters.category)) return false;
       if (excludeKey !== 'language' && filters.language && repo.language !== filters.language) return false;
       if (excludeKey !== 'topic' && filters.topic && !repo.topics?.includes(filters.topic)) return false;
@@ -113,20 +110,12 @@ function AppContent() {
     <div className={styles.filters}>
       <div className={styles.filterGroup}>
         <label className={styles.checkbox}>
-          <input 
-            type="checkbox" 
-            checked={filters.archived} 
-            onChange={e => setFilters(f => ({ ...f, archived: e.target.checked }))} 
+          <input
+            type="checkbox"
+            checked={filters.archived}
+            onChange={e => setFilters(f => ({ ...f, archived: e.target.checked }))}
           />
           Show Archived
-        </label>
-        <label className={styles.checkbox}>
-          <input 
-            type="checkbox" 
-            checked={filters.template} 
-            onChange={e => setFilters(f => ({ ...f, template: e.target.checked }))} 
-          />
-          Templates Only
         </label>
       </div>
 
@@ -201,7 +190,7 @@ function AppContent() {
       ) : (
         <div className={styles.grid}>
           {filteredRepos.map((repo) => (
-            <RepoCard key={repo.html_url} repo={repo} />
+            <RepoCard key={repo.repo} repo={repo} />
           ))}
         </div>
       )}

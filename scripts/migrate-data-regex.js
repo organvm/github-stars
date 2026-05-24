@@ -1,25 +1,39 @@
 const fs = require('fs');
+const yaml = require('js-yaml');
+
+// Structural key migration (no yq dependency). This replaces the previous
+// blanket line-regex approach, which could rename `updated_at`/`timestamp`
+// anywhere they appeared regardless of nesting and silently corrupt unrelated
+// fields. Renames are now scoped to their exact parent objects.
 
 const filePath = 'repos.yml';
-let content = fs.readFileSync(filePath, 'utf8');
+const data = yaml.load(fs.readFileSync(filePath, 'utf8')) || {};
 
-// Replace timestamp fields
-// 1. starred_at -> user_starred_at
-// Look for "  starred_at:" (indentation varies but usually 2 or 4 spaces)
-content = content.replace(/^(\s+)starred_at:/gm, '$1user_starred_at:');
+// manifest_metadata.last_updated -> manifest_updated_at
+if (data.manifest_metadata && data.manifest_metadata.last_updated !== undefined) {
+  data.manifest_metadata.manifest_updated_at = data.manifest_metadata.last_updated;
+  delete data.manifest_metadata.last_updated;
+}
 
-// 2. updated_at -> repo_pushed_at (inside github_metadata)
-// This one is tricky because updated_at might be used elsewhere.
-// But based on the schema, updated_at is only in github_metadata.
-// Let's look for "      updated_at:" which is deeply nested.
-content = content.replace(/^(\s+)updated_at:/gm, '$1repo_pushed_at:');
+for (const repo of data.repositories || []) {
+  // starred_at -> user_starred_at
+  if (repo.starred_at !== undefined) {
+    repo.user_starred_at = repo.starred_at;
+    delete repo.starred_at;
+  }
 
-// 3. timestamp -> classified_at (inside ai_classification)
-// Look for "      timestamp:"
-content = content.replace(/^(\s+)timestamp:/gm, '$1classified_at:');
+  // github_metadata.updated_at -> repo_pushed_at
+  if (repo.github_metadata && repo.github_metadata.updated_at !== undefined) {
+    repo.github_metadata.repo_pushed_at = repo.github_metadata.updated_at;
+    delete repo.github_metadata.updated_at;
+  }
 
-// 4. last_updated -> manifest_updated_at (in manifest_metadata)
-content = content.replace(/^(\s+)last_updated:/gm, '$1manifest_updated_at:');
+  // ai_classification.timestamp -> classified_at
+  if (repo.ai_classification && repo.ai_classification.timestamp !== undefined) {
+    repo.ai_classification.classified_at = repo.ai_classification.timestamp;
+    delete repo.ai_classification.timestamp;
+  }
+}
 
-fs.writeFileSync(filePath, content);
-console.log('Migration complete via regex replacement.');
+fs.writeFileSync(filePath, yaml.dump(data, { lineWidth: -1, noRefs: true, sortKeys: false }));
+console.log('Migration complete (structural key rename).');
