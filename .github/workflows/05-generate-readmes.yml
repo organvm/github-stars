@@ -27,216 +27,30 @@ jobs:
           fetch-depth: 0
           ref: main
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Content
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const fs = require('fs');
-            const { execSync } = require('child_process');
-            const path = require('path');
-
-            // 1. Load Data
-            if (!fs.existsSync('repos.yml')) {
-              console.log('No repos.yml found');
-              return;
-            }
-            const yaml = fs.readFileSync('repos.yml', 'utf8');
-            // yq (mikefarah) pre-installed on ubuntu-latest since 2023
-            const json = execSync('yq eval -o=json -', { input: yaml, encoding: 'utf8', maxBuffer: 50*1024*1024 });
-            const data = JSON.parse(json);
-            const repos = data.repositories || [];
-            
-            // 2. Prepare Directories
-            ['categories', 'tags'].forEach(dir => {
-              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            });
-
-            // 3. Helper Functions
-            const slugify = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-            
-            // SECURITY: Comprehensive filename sanitization
-            // Windows reserved names: CON, PRN, AUX, NUL, COM1-9, LPT1-9
-            const windowsReservedNames = new Set([
-              'CON', 'PRN', 'AUX', 'NUL',
-              'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-              'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
-            ]);
-            
-            const sanitizeFilename = (text) => {
-              if (!text || typeof text !== 'string') return 'unnamed';
-              
-              // Handle namespace syntax: convert "lang:python" to "lang-python"
-              let safe = text.replace(/:/g, '-');
-              
-              // Remove/replace invalid filename characters
-              safe = safe.replace(/[<>"|?*\/\\]/g, '-');
-              
-              // Collapse multiple dashes
-              safe = safe.replace(/-+/g, '-');
-              
-              // Remove leading/trailing dashes
-              safe = safe.replace(/^-+|-+$/g, '');
-              
-              // Check for Windows reserved names (case-insensitive)
-              // Extract base name without extension (handle multiple dots correctly)
-              const lastDotIndex = safe.lastIndexOf('.');
-              const baseName = lastDotIndex > 0 ? safe.substring(0, lastDotIndex) : safe;
-              if (windowsReservedNames.has(baseName.toUpperCase())) {
-                safe = '_' + safe; // Prefix with underscore to make it safe
-              }
-              
-              // Ensure filename is not empty
-              return safe || 'unnamed';
-            };
-            
-            const escapeMd = (text) => (text || '').replace(/([*_`\[\]])/g, '\\$1');
-            const formatDate = (iso) => iso ? new Date(iso).toISOString().split('T')[0] : 'N/A';
-            
-            const renderRepoRow = (repo) => {
-              const stars = repo.github_metadata?.stargazers_count || 0;
-              const lang = repo.github_metadata?.language || '';
-              const pushed = formatDate(repo.github_metadata?.repo_pushed_at);
-              const desc = (repo.summary || 'No description').replace(/\n/g, ' ');
-              const name = repo.repo;
-              const url = repo.github_metadata?.html_url || `https://github.com/${name}`;
-              
-              let badges = [];
-              if (lang) badges.push(`\`${lang}\``);
-              if (stars > 1000) badges.push(`★ ${Math.round(stars/100)/10}k`);
-              else if (stars > 0) badges.push(`★ ${stars}`);
-              
-              return `| [${name}](${url}) | ${escapeMd(desc)} | ${badges.join(' ')} | ${pushed} |`;
-            };
-
-            const renderTableHeader = () => `| Repository | Description | Metadata | Last Pushed |\n|---|---|---|---|`;
-
-            // 4. Generate Category Pages
-            const categories = {};
-            repos.forEach(r => {
-              (r.categories || []).forEach(c => {
-                if (!categories[c]) categories[c] = [];
-                categories[c].push(r);
-              });
-            });
-
-            const generatedCategories = new Set();
-            Object.entries(categories).forEach(([cat, items]) => {
-              const sorted = items.sort((a,b) => new Date(b.user_starred_at) - new Date(a.user_starred_at));
-              const content = `# ${cat.charAt(0).toUpperCase() + cat.slice(1)}\n\n` +
-                `*${sorted.length} repositories*\n\n` +
-                `[← Back to Index](../README.md)\n\n` +
-                renderTableHeader() + '\n' +
-                sorted.map(renderRepoRow).join('\n') + '\n\n' +
-                `*Generated by [GitHub Stars Curation](https://github.com/primeinc/github-stars)*`;
-              
-              const filename = sanitizeFilename(cat) + '.md';
-              fs.writeFileSync(`categories/${filename}`, content);
-              generatedCategories.add(filename);
-            });
-
-            // 5. Generate Tag Pages
-            const tags = {};
-            repos.forEach(r => {
-              (r.tags || []).forEach(t => {
-                if (t.startsWith('lang:')) return; // Skip language tags in tag cloud
-                if (!tags[t]) tags[t] = [];
-                tags[t].push(r);
-              });
-            });
-
-            const generatedTags = new Set();
-            Object.entries(tags).forEach(([tag, items]) => {
-              if (items.length < 2) return; // Skip sparse tags
-              const sorted = items.sort((a,b) => new Date(b.user_starred_at) - new Date(a.user_starred_at));
-              const content = `# Tag: ${tag}\n\n` +
-                `*${sorted.length} repositories*\n\n` +
-                `[← Back to Index](../README.md)\n\n` +
-                renderTableHeader() + '\n' +
-                sorted.map(renderRepoRow).join('\n');
-              
-              const filename = sanitizeFilename(tag) + '.md';
-              fs.writeFileSync(`tags/${filename}`, content);
-              generatedTags.add(filename);
-            });
-
-            // CLEANUP: Remove orphaned files
-            const cleanupOrphans = (dir, validFiles) => {
-              if (!fs.existsSync(dir)) return;
-              const existingFiles = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
-              const orphans = existingFiles.filter(f => !validFiles.has(f));
-              orphans.forEach(f => {
-                const filePath = path.join(dir, f);
-                console.log(`Removing orphaned file: ${filePath}`);
-                fs.unlinkSync(filePath);
-              });
-              if (orphans.length > 0) {
-                console.log(`Cleaned up ${orphans.length} orphaned files from ${dir}/`);
-              }
-            };
-            
-            cleanupOrphans('categories', generatedCategories);
-            cleanupOrphans('tags', generatedTags);
-
-            // 6. Generate Main Index (README.md)
-            const stats = {
-              total: repos.length,
-              categories: Object.keys(categories).length,
-              tags: Object.keys(tags).length
-            };
-
-            const topTags = Object.entries(tags)
-              .sort((a,b) => b[1].length - a[1].length)
-              .slice(0, 30)
-              .map(([t, i]) => `[${t}](tags/${sanitizeFilename(t)}.md) (${i.length})`);
-
-            let indexContent = `# Awesome Starred Repositories\n\n` +
-              `> A curated list of **${stats.total}** repositories across **${stats.categories}** categories, automatically classified and organized.\n\n` +
-              `Last updated: ${new Date().toISOString().split('T')[0]}\n\n`;
-
-            // Recent Stars Section (top priority)
-            const recent = repos
-              .sort((a,b) => new Date(b.user_starred_at) - new Date(a.user_starred_at))
-              .slice(0, 10);
-            
-            indexContent += `## ⭐ Recently Starred\n\n` +
-              renderTableHeader() + '\n' +
-              recent.map(renderRepoRow).join('\n') + '\n\n';
-
-            // Popular Tags
-            indexContent += `## 🏷️ Popular Tags\n\n` + topTags.join(' • ') + `\n\n`;
-
-            // Categories in collapsible grid at bottom
-            const catsByCount = Object.entries(categories)
-              .sort((a,b) => b[1].length - a[1].length)
-              .map(([cat, items]) => `[${cat}](categories/${cat}.md) (${items.length})`);
-            
-            // Build 3-column table
-            const cols = 3;
-            let catTable = '| | | |\n|---|---|---|\n';
-            for (let i = 0; i < catsByCount.length; i += cols) {
-              const row = [];
-              for (let j = 0; j < cols; j++) {
-                row.push(catsByCount[i + j] || '');
-              }
-              catTable += `| ${row.join(' | ')} |\n`;
-            }
-
-            indexContent += `<details>\n<summary>📂 All Categories (${stats.categories})</summary>\n\n${catTable}\n</details>\n`;
-
-            indexContent += `\n---\n*Powered by [GitHub Stars Curation System](https://github.com/primeinc/github-stars)*`;
-
-            fs.writeFileSync('README.md', indexContent);
-            console.log('README generation complete.');
+        run: node scripts/generate-readmes.cjs
 
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           git add README.md categories/ tags/
-          
+
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
