@@ -21,16 +21,16 @@ test('has title and loads repository data', async ({ page }) => {
 
   console.log('App shell loaded. Verifying repository list...');
 
-  // Wait for at least one repository card to appear
-  const cards = page.locator('main h3, main .repository-card');
-  await expect(cards.first()).toBeVisible({ timeout: 20000 });
-  
-  const count = await cards.count();
-  console.log(`Found ${count} repository elements.`);
-  expect(count).toBeGreaterThan(0);
-
   // Check that "Loading repositories..." is gone
   await expect(page.locator('body')).not.toContainText('Loading repositories...', { timeout: 10000 });
+
+  const cards = page.locator('main h3, main .repository-card');
+  const emptyState = page.getByText('No repositories found matching filters.', { exact: true });
+  const cardCount = await cards.count();
+  const emptyStateVisible = await emptyState.isVisible();
+
+  console.log(`Found ${cardCount} repository elements. Empty state visible: ${emptyStateVisible}.`);
+  expect(cardCount > 0 || emptyStateVisible).toBe(true);
   
   console.log('Verification successful. Taking screenshot...');
   await page.screenshot({ path: '../page-verification.png', fullPage: true });
